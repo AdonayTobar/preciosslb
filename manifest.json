@@ -1,7 +1,7 @@
 {
     "name": "Catálogo Galvanissa",
     "short_name": "Precios",
-    "start_url": "./index.html",
+    "start_url": "./",
     "display": "standalone",
     "background_color": "#f7f9fb",
     "theme_color": "#ffffff",
