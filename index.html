@@ -1061,20 +1061,29 @@
                 window.addEventListener('load', () => {
                     navigator.serviceWorker.register('./sw.js')
                         .then(registration => {
-                            console.log('ServiceWorker registrado con éxito:', registration.scope);
-                            // Opcional: Mostrar un pequeño indicador visual temporal
-                            const status = document.getElementById('statusMessage');
-                            if (status && status.classList.contains('hidden')) {
-                                // Solo mostrar si no hay otro mensaje importante
-                                // setStatus('App lista para modo offline', false, 'bg-blue-100 text-blue-800');
-                                // setTimeout(() => status.classList.add('hidden'), 3000);
+                            console.log('ServiceWorker registrado:', registration.scope);
+
+                            // Escuchar cambios de estado para saber si ya está activo
+                            if (registration.installing) {
+                                registration.installing.addEventListener('statechange', (e) => {
+                                    if (e.target.state === 'activated') {
+                                        setStatus('¡App lista para usar sin internet!', false, 'bg-blue-100 text-blue-800');
+                                    }
+                                });
+                            } else if (registration.active) {
+                                // Si ya estaba activo de antes
+                                console.log('ServiceWorker ya estaba activo.');
                             }
                         })
                         .catch(error => {
-                            console.log('Fallo al registrar ServiceWorker:', error);
-                            setStatus('Error al instalar App (SW): ' + error.message, true);
+                            console.error('Fallo SW:', error);
+                            setStatus('Error PWA: ' + error.message, true);
                         });
                 });
+
+                // Detectar si ya estamos offline
+                window.addEventListener('online', () => setStatus('Conexión recuperada.', false, 'bg-green-100 text-green-800'));
+                window.addEventListener('offline', () => setStatus('Estás sin internet (Modo Offline)', true));
             }
         });
     </script>
