@@ -1,59 +1,54 @@
-const CACHE_NAME = 'galvanissa-precios-v1';
-const urlsToCache = [
+// sw.js  –  Versión 100 % fiable incluso cerrando todo en móvil
+const CACHE = 'galvanissa-precios-v3'; // Incrementamos versión
+
+// TODOS los archivos que quieres que funcionen 100 % offline
+const ARCHIVOS_OBLIGATORIOS = [
     './',
     './index.html',
-    './manifest.json'
+    './manifest.json',
+    'https://cdn.tailwindcss.com', // Tailwind (si se puede cachear, aunque es externo)
+    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap'
 ];
 
-self.addEventListener('install', event => {
-    event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(urlsToCache))
+self.addEventListener('install', e => {
+    e.waitUntil(
+        caches.open(CACHE)
+            .then(cache => cache.addAll(ARCHIVOS_OBLIGATORIOS))
+            .then(() => self.skipWaiting())
     );
 });
 
-self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys().then(cacheNames => {
+self.addEventListener('activate', e => {
+    e.waitUntil(
+        caches.keys().then(keys => {
             return Promise.all(
-                cacheNames.map(cacheName => {
-                    if (cacheName !== CACHE_NAME) {
-                        return caches.delete(cacheName);
-                    }
-                })
+                keys.filter(key => key !== CACHE).map(key => caches.delete(key))
             );
-        }).then(() => {
-            return self.clients.claim(); // Tomar control de los clientes inmediatamente
-        })
+        }).then(() => self.clients.claim())
     );
 });
 
-// Estrategia: Stale-While-Revalidate
-// 1. Sirve la caché INMEDIATAMENTE (rápido y funciona offline).
-// 2. Va a la red en segundo plano para actualizar la caché para la PRÓXIMA vez.
-self.addEventListener('fetch', event => {
-    // Ignorar peticiones que no sean GET
-    if (event.request.method !== 'GET') return;
+self.addEventListener('fetch', e => {
+    // Solo cacheamos GET
+    if (e.request.method !== 'GET') {
+        return;
+    }
 
-    event.respondWith(
-        caches.match(event.request).then(cachedResponse => {
-            // Si hay caché, la devolvemos YA. Si no, vamos a la red.
-            const fetchPromise = fetch(event.request).then(networkResponse => {
-                // Clonamos y guardamos la nueva versión en caché
-                if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-                    const responseToCache = networkResponse.clone();
-                    caches.open(CACHE_NAME).then(cache => {
-                        cache.put(event.request, responseToCache);
-                    });
+    e.respondWith(
+        caches.match(e.request).then(cached => {
+            // SI está en cache → lo devolvemos directamente (aunque no haya internet)
+            if (cached) return cached;
+
+            // SI no está en cache → intentamos red
+            return fetch(e.request).catch(() => {
+                // Si falla la red y es la página principal → devolvemos index.html
+                if (e.request.mode === 'navigate') {
+                    return caches.match('./index.html');
                 }
-                return networkResponse;
-            }).catch(() => {
-                // Si falla la red y no teníamos caché, no podemos hacer nada (o mostrar página offline genérica)
             });
-
-            // Devolver caché si existe, si no, esperar a la red
-            return cachedResponse || fetchPromise;
         })
     );
 });
+
 
