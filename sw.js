@@ -1,27 +1,17 @@
-const CACHE_NAME = 'catalogo-v2'; // Incrementamos versión para forzar actualización
+const CACHE_NAME = 'galvanissa-precios-v1';
 const urlsToCache = [
     './',
     './index.html',
-    './manifest.json',
-    'https://cdn.tailwindcss.com',
-    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js'
+    './manifest.json'
 ];
 
-// Instalación: Cachear archivos estáticos
 self.addEventListener('install', event => {
-    // Forzar que este SW tome el control inmediatamente
-    self.skipWaiting();
-
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then(cache => {
-                console.log('Archivos cacheados');
-                return cache.addAll(urlsToCache);
-            })
+            .then(cache => cache.addAll(urlsToCache))
     );
 });
 
-// Activación: Limpiar cachés viejas y tomar control
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(cacheNames => {
@@ -66,3 +56,4 @@ self.addEventListener('fetch', event => {
         })
     );
 });
+
