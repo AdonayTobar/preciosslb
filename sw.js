@@ -1,54 +1,50 @@
-// sw.js  –  Versión 100 % fiable incluso cerrando todo en móvil
-const CACHE = 'galvanissa-precios-v3'; // Incrementamos versión
+importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.6.0/workbox-sw.js');
 
-// TODOS los archivos que quieres que funcionen 100 % offline
-const ARCHIVOS_OBLIGATORIOS = [
-    './',
-    './index.html',
-    './manifest.json',
-    'https://cdn.tailwindcss.com', // Tailwind (si se puede cachear, aunque es externo)
-    'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap'
-];
+workbox.setConfig({ debug: false });
 
-self.addEventListener('install', e => {
-    e.waitUntil(
-        caches.open(CACHE)
-            .then(cache => cache.addAll(ARCHIVOS_OBLIGATORIOS))
-            .then(() => self.skipWaiting())
-    );
-});
+// Cachea todo lo estático con Stale-while-revalidate (perfecto para GitHub Pages)
+// NOTA: Usamos NetworkFirst para navegación para asegurar que siempre se intente bajar la última versión
+workbox.routing.registerRoute(
+    ({ request }) => request.mode === 'navigate',
+    new workbox.strategies.NetworkFirst({
+        cacheName: 'paginas',
+        plugins: [
+            new workbox.cacheableResponse.CacheableResponsePlugin({
+                statuses: [0, 200]  // importante: acepta respuestas opaque (GitHub Pages)
+            })
+        ]
+    })
+);
 
-self.addEventListener('activate', e => {
-    e.waitUntil(
-        caches.keys().then(keys => {
-            return Promise.all(
-                keys.filter(key => key !== CACHE).map(key => caches.delete(key))
-            );
-        }).then(() => self.clients.claim())
-    );
-});
+// Cachea CSS, JS, imágenes, fuentes → Cache First
+workbox.routing.registerRoute(
+    /\.(?:css|js|png|jpg|jpeg|svg|gif|woff2|woff|ttf)$/,
+    new workbox.strategies.CacheFirst({
+        cacheName: 'assets',
+        plugins: [
+            new workbox.expiration.ExpirationPlugin({
+                maxEntries: 100,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+            }),
+            new workbox.cacheableResponse.CacheableResponsePlugin({
+                statuses: [0, 200]
+            })
+        ]
+    })
+);
 
-self.addEventListener('fetch', e => {
-    // Solo cacheamos GET
-    if (e.request.method !== 'GET') {
-        return;
+// Fallback offline: si todo falla, muestra tu index.html
+workbox.routing.setCatchHandler(({ event }) => {
+    if (event.request.mode === 'navigate') {
+        return caches.match('index.html');
     }
-
-    e.respondWith(
-        caches.match(e.request).then(cached => {
-            // SI está en cache → lo devolvemos directamente (aunque no haya internet)
-            if (cached) return cached;
-
-            // SI no está en cache → intentamos red
-            return fetch(e.request).catch(() => {
-                // Si falla la red y es la página principal → devolvemos index.html
-                if (e.request.mode === 'navigate') {
-                    return caches.match('./index.html');
-                }
-            });
-        })
-    );
+    return Response.error();
 });
+
+// Forzar que el SW tome control inmediatamente el control
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => self.clients.claim());
+
+
 
 
