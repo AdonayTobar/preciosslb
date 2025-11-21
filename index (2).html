@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Precios - Galvanissa</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de PapaParse: Para leer el CSV de forma eficiente -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Exponer funciones globales (window) para que el script principal las use
+        window.initializeApp = initializeApp;
+        window.getAuth = getAuth;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.signInAnonymously = signInAnonymously;
+        window.signOut = signOut;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.getFirestore = getFirestore;
+        window.setLogLevel = setLogLevel;
+    </script>
+
+    <!-- Configuración de la fuente Inter y CSS personalizado -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+
+        .color-galvanissa {
+            color: #293241;
+            /* Indigo-700 para dar un toque distintivo a precios/headers */
+        }
+
+        /* Estilo para el ícono de ordenación */
+        .sort-icon {
+            display: inline-block;
+            margin-left: 0.5rem;
+            color: #3b82f6;
+            /* Indigo-500 */
+        }
+
+        /* Oculta la tabla en móvil y la lista en desktop */
+        #product-table {
+            display: none;
+        }
+
+        @media (min-width: 768px) {
+            #mobileList {
+                display: none;
+            }
+
+            #product-table {
+                display: table;
+            }
+        }
+
+        .no-scroll {
+            overflow: hidden;
+        }
+    </style>
+    <link rel="manifest" href="manifest.json">
+</head>
+
+<body class="antialiased">
+    <!-- Añadimos un ancla invisible en la parte superior para asegurar el desplazamiento -->
+    <a id="top"></a>
+
+    <!-- Contenido Principal (Ahora visible por defecto) -->
+    <div id="main-content">
+        <!-- Navbar Responsivo -->
+        <header class="bg-white shadow-md sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <!-- Logo: MODIFICADO para que apunte siempre a la parte superior -->
+                    <a href="#top"
+                        class="flex-shrink-0 text-xl font-extrabold text-indigo-600 tracking-tight transition duration-150 ease-in-out hover:text-indigo-800"
+                        style="color: #293241;"
+                        onclick="event.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' });">
+                        Adonay Tobar
+                    </a>
+
+                    <!-- Navegación y Botón de Cerrar Sesión (Desktop/Tablet) -->
+                    <nav id="main-nav" class="hidden md:flex space-x-6 items-center">
+                        <!-- El enlace de Precios ahora recarga la página -->
+                        <a href="javascript:window.location.reload()"
+                            class="text-gray-600 hover:text-indigo-600 font-medium transition duration-150 ease-in-out">Precios</a>
+                        <button id="logout-button-desktop"
+                            class="ml-4 px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-full shadow-lg transition duration-150 ease-in-out">
+                            Cerrar Sesión
+                        </button>
+                    </nav>
+
+                    <!-- Menú Hamburguesa (Móvil) -->
+                    <div class="md:hidden flex items-center">
+                        <button id="menu-toggle"
+                            class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 transition duration-150 ease-in-out"
+                            aria-expanded="false">
+                            <svg class="block h-6 w-6" id="icon-menu" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                            <svg class="hidden h-6 w-6" id="icon-close" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menú Móvil Desplegable -->
+            <div id="mobile-menu" class="hidden md:hidden absolute w-full bg-white shadow-xl">
+                <div class="pt-2 pb-3 space-y-1 px-4 border-t border-gray-100">
+                    <a href="javascript:window.location.reload()"
+                        class="block rounded-lg py-2 px-3 text-base font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600">Precios</a>
+                </div>
+                <div class="pt-4 pb-2 border-t border-gray-100 px-4">
+                    <button id="logout-button-mobile"
+                        class="w-full text-left rounded-lg py-2 px-3 text-base font-semibold text-white bg-red-500 hover:bg-red-600 transition duration-150 ease-in-out">
+                        Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Contenido Principal -->
+        <main class="py-5 md:py-16">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center mb-2">
+                    <h1 class="text-2xl font-extrabold text-gray-900 sm:text-5xl" style="color: #293241;">
+                        Precios Galvanissa
+                    </h1>
+                    <p id="user-info" class="mt-2 text-md text-gray-500 truncate hidden">
+                    </p>
+                </div>
+
+                <!-- Controles: Buscador y Mensajes de Estado -->
+                <div class="sticky top-16 pt-4 bg-white z-20 mb-6 rounded-xl shadow-lg p-4">
+                    <!-- Mensaje de Estado (Carga/Error/Éxito) -->
+                    <p id="statusMessage" class="hidden text-sm font-medium text-center p-3 rounded-lg"></p>
+
+                    <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 items-center">
+                        <div class="relative w-full">
+                            <input type="text" id="searchInput" placeholder="Buscar por código, descripción..."
+                                class="w-full pl-5 pr-10 py-3 text-base border border-gray-300 rounded-full focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 shadow-sm">
+                            <button id="clearSearchBtn"
+                                class="hidden absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition duration-150"
+                                title="Limpiar Búsqueda">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p id="resultsCount" class="text-sm text-gray-500 mt-2 text-center">Cargando...</p>
+                </div>
+
+                <!-- Contenedor de Catálogo -->
+                <div class="bg-white shadow-xl rounded-xl overflow-hidden">
+
+                    <!-- 1. Vista de Escritorio (Tabla) -->
+                    <div class="hidden md:block overflow-x-auto">
+                        <table id="product-table" class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr id="tableHeader">
+                                    <!-- Cabeceras inyectadas por JS -->
+                                </tr>
+                            </thead>
+                            <tbody id="productTableBody" class="divide-y divide-gray-200">
+                                <tr id="initialLoadingRow">
+                                    <td colspan="5" class="p-6 text-center text-gray-400">Cargando datos del Google
+                                        Sheet...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 2. Vista Móvil (Lista de Tarjetas) -->
+                    <div id="mobileList" class="md:hidden space-y-2 py-3">
+                        <!-- Tarjetas inyectadas por JS -->
+                        <p id="mobileLoadingText" class="p-4 text-center text-gray-400">Cargando datos del Google
+                            Sheet...</p>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 text-white py-6">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-gray-400">
+                Catálogo de precios &copy; 2025. Adonay Tobar.
+            </div>
+        </footer>
+    </div>
+
+    <!-- CAJA DE MENSAJE SIMPLE (Reemplazo de alert/confirm) -->
+    <div id="message-box" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[100] items-center justify-center">
+        <div
+            class="bg-white rounded-xl shadow-2xl p-6 max-w-sm mx-auto text-center transform transition-all duration-300">
+            <p id="message-text" class="text-gray-700 font-semibold mb-4"></p>
+            <button id="close-message-btn"
+                class="px-4 py-2 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 transition duration-150">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <!-- CAJA MODAL DE DESCUENTOS (Ventana emergente solicitada) -->
+    <div id="discount-modal"
+        class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-[100] items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full transform transition-all duration-300">
+            <div id="discount-modal-content">
+                <!-- Contenido de descuentos inyectado aquí -->
+            </div>
+            <div class="mt-6 text-right">
+                <button id="close-discount-modal-btn"
+                    class="px-5 py-2 bg-red-500 text-white font-semibold rounded-full hover:bg-red-600 transition duration-150">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- SCRIPT DE INICIALIZACIÓN Y LÓGICA DEL USUARIO -->
+    <script>
+        // =================================================================================
+        // CONFIGURACIÓN DE FIREBASE (MANDATORIA)
+        // =================================================================================
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Inicialización de Variables Globales (Firebase y Auth)
+        let db, auth, userId = 'guest';
+
+        /**
+         * Inicializa Firebase, autentica al usuario y carga el catálogo.
+         */
+        async function initializeAppAndAuth() {
+            const isLocalEnvironment = Object.keys(firebaseConfig).length === 0;
+
+            if (isLocalEnvironment) {
+                // DETECCIÓN DE ENTORNO LOCAL: Omitir la autenticación de Firebase
+                console.warn("Ejecutando en entorno local (sin config de Firebase). Omitiendo Auth y cargando datos directamente.");
+                userId = 'local-dev';
+                document.getElementById('user-info').textContent = `ID de Usuario: ${userId} (Local)`;
+                loadData();
+                return; // Salir de la función para evitar errores de Firebase
+            }
+
+            try {
+                // setLogLevel('debug'); // Descomentar para debug de Firestore
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autenticación usando el token o anónimamente
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Esperar a que el estado de autenticación se resuelva
+                onAuthStateChanged(auth, (user) => {
+                    // El contenido principal ya está visible, solo actualizamos la información y cargamos datos
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-info').textContent = `ID de Usuario: ${userId}`;
+                        // Una vez autenticado, cargamos los datos del catálogo
+                        loadData();
+                    } else {
+                        userId = 'anonymous';
+                        document.getElementById('user-info').textContent = `ID de Usuario: ${userId} (Anónimo)`;
+                        loadData(); // Carga de igual forma si no se requiere autenticación estricta en los datos
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al inicializar Firebase o autenticar:", error);
+                // Como la pantalla de carga se quitó, mostramos el error en la barra de estado
+                document.getElementById('statusMessage').textContent = 'Error crítico de autenticación. Ver consola.';
+                document.getElementById('statusMessage').classList.remove('hidden');
+            }
+        }
+
+        // =================================================================================
+        // CONFIGURACIÓN DE DATOS Y LÓGICA DEL USUARIO
+        // =================================================================================
+        // const GOOGLE_SHEETS_CSV_URL = ... (Movido dentro de loadData para cache-busting)
+
+        // Variables de estado
+        let allProducts = [];
+        let currentSort = { column: null, direction: 'asc' };
+        let columnHeaders = []; // Almacena los nombres de las columnas
+        let categoryColumnKey = null; // Almacena el nombre exacto de la columna de Categoría
+        let codeColumnKey = null; // ALMACENA EL NOMBRE EXACTO DE LA COLUMNA DE CÓDIGO
+        let priceColumnKey = null; // ALMACENA EL NOMBRE EXACTO DE LA COLUMNA DE PRECIO
+        let OFFER_PRODUCT_CODES = new Set(); // CÓDIGOS DE PRODUCTOS CON CATEGORÍA "OFERTA"
+
+        // LISTA DE CATEGORÍAS RESTRINGIDAS (SOLO 3% DE DESCUENTO)
+        const RESTRICTED_CATEGORIES = new Set([
+            "ARQUITEJA", "ZINCALUM", "COLORALUM", "STARMAX", "TORNILLO", "CAPOTE", "CANAL",
+            "SELLADOR", "HIERRO G40", "ACCESORIOS HIERRO", "ELECTRODO", "AISLANTE TERMICO",
+            "CERRADURA", "TELA METALICA", "SUNLIGHT", "MISCELANEOS", "ACCESORIO THERMOTECHO BLANCO",
+            "ACCESORIO THERMOTECHO ROJO", "ACCESORIO THERMOTECHO VERDE", "ACCESORIO THERMOTECHO GRIS"
+        ].map(c => c.toUpperCase().trim())); // Convertir a mayúsculas para búsqueda sin distinción de mayúsculas/minúsculas
+
+        // Elementos del DOM
+        const statusMessage = document.getElementById('statusMessage');
+        const tableHeader = document.getElementById('tableHeader');
+        const productTableBody = document.getElementById('productTableBody');
+        const mobileList = document.getElementById('mobileList');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+        const resultsCount = document.getElementById('resultsCount');
+        const mobileLoadingText = document.getElementById('mobileLoadingText');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const closeMessageBtn = document.getElementById('close-message-btn');
+
+        // Elementos del Nuevo Modal de Descuentos
+        const discountModal = document.getElementById('discount-modal');
+        const discountModalContent = document.getElementById('discount-modal-content');
+        const closeDiscountModalBtn = document.getElementById('close-discount-modal-btn');
+
+
+        // Muestra u oculta el mensaje de estado (Reemplazo de alert/confirm)
+        function showMessage(message) {
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden');
+            messageBox.classList.add('flex');
+        }
+
+        // Oculta el mensaje de estado
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+            messageBox.classList.remove('flex');
+        }
+
+        // Cierra el modal de descuentos
+        function closeDiscountModal() {
+            discountModal.classList.add('hidden');
+            discountModal.classList.remove('flex');
+        }
+
+        // Muestra u oculta el mensaje de estado en la interfaz
+        function setStatus(message, isError = false, customClass = '') {
+            statusMessage.textContent = message;
+            const defaultClass = isError ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800';
+            statusMessage.className = `mb-4 text-lg font-medium text-center p-3 rounded-lg ${customClass || defaultClass}`;
+            statusMessage.classList.remove('hidden');
+        }
+
+        // Oculta la fila de carga inicial de la tabla
+        function hideInitialRow() {
+            const row = document.getElementById('initialLoadingRow');
+            if (row) row.remove();
+            if (mobileLoadingText) mobileLoadingText.remove();
+        }
+
+        // =================================================================================
+        // FUNCIÓN UTILITARIA: DEBOUNCE (ANTI-REBOTE)
+        // =================================================================================
+        function debounce(func, delay) {
+            let timeoutId;
+            return function (...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    func.apply(this, args);
+                }, delay);
+            };
+        }
+
+        /**
+         * Limpia el texto para facilitar la búsqueda, transformando símbolos de pulgadas y normalizando.
+         * Por ejemplo: 'tubo ght 4"x2"' -> 'tubo ght 4 pulg 2 pulg'
+         * @param {string} text El texto a limpiar.
+         * @returns {string} El texto limpio en minúsculas.
+         */
+        function cleanSearchText(text) {
+            if (!text) return '';
+            // 1. Convertir a minúsculas
+            let cleaned = text.toLowerCase();
+
+            // 2. Reemplazar el símbolo de pulgada (") por la palabra "pulg"
+            cleaned = cleaned.replace(/"/g, ' pulg ');
+
+            // 3. Reemplazar 'x' entre números por espacio (ej: 4x2 -> 4 2)
+            // Esto permite que al buscar "4", encuentre "4x2" porque ahora son dos números separados.
+            cleaned = cleaned.replace(/(\d)\s*x\s*(\d)/g, '$1 $2');
+
+            // 4. Reemplazar símbolos comunes de unidad y puntuación con espacio
+            cleaned = cleaned.replace(/[\.,\/]/g, ' ');
+            // Eliminar guiones, asteriscos, comillas simples
+            cleaned = cleaned.replace(/['*_-]/g, ' ');
+
+            // 5. Normalizar múltiples espacios a un solo espacio y quitar espacios de inicio/fin
+            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+            return cleaned;
+        }
+
+
+        // =================================================================================
+        // 1. CARGA Y PROCESAMIENTO DE DATOS (PapaParse + LocalStorage)
+        // =================================================================================
+        async function loadData() {
+            setStatus("Conectando con Google Sheets y cargando datos...");
+
+            // Añadimos un timestamp para evitar que el navegador o el proxy nos den una versión vieja
+            const timestamp = new Date().getTime();
+            const freshURL = "https://api.allorigins.win/raw?url=" + encodeURIComponent(`https://docs.google.com/spreadsheets/d/e/2PACX-1vT8XYpMQEshg2eZghit9nFFjIiRz8_G_PHnlOlYWmsX9kzrN1CH7v_FQE0ciZnU8Va4AZofLfJvm4KF/pub?gid=0&single=true&output=csv&_t=${timestamp}`);
+
+            Papa.parse(freshURL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function (results) {
+                    if (results.data.length === 0 || results.errors.length > 0) {
+                        // Si hay errores de parseo pero tenemos caché, intentamos usarla
+                        console.warn("Error en datos remotos, intentando caché...", results.errors);
+                        if (!tryLoadFromCache()) {
+                            const errorMsg = results.errors.length > 0 ? results.errors[0].message : "No se encontraron datos remotos ni locales.";
+                            setStatus("Error al procesar datos: " + errorMsg, true);
+                        }
+                        return;
+                    }
+
+                    // ÉXITO: Guardar en caché y procesar
+                    saveToCache(results.data);
+                    processData(results.data);
+
+                    setStatus("Catálogo actualizado exitosamente.", false, 'bg-green-100 text-green-800');
+                    setTimeout(() => statusMessage.classList.add('hidden'), 1500);
+                },
+                error: function (error) {
+                    console.error("Error de red (PapaParse):", error);
+                    // FALLO DE RED: Intentar cargar desde caché
+                    if (tryLoadFromCache()) {
+                        console.log("Datos cargados desde caché por error de red.");
+                    } else {
+                        setStatus("Error de conexión y no hay datos guardados. Verifica tu internet.", true);
+                    }
+                }
+            });
+        }
+
+        // Función para guardar datos en LocalStorage
+        function saveToCache(data) {
+            try {
+                const cacheData = {
+                    timestamp: new Date().toLocaleString(),
+                    data: data
+                };
+                localStorage.setItem('productsCache', JSON.stringify(cacheData));
+                console.log("Datos guardados en caché local.");
+            } catch (e) {
+                console.warn("No se pudo guardar en caché (posiblemente espacio lleno):", e);
+            }
+        }
+
+        // Función para intentar cargar desde LocalStorage
+        function tryLoadFromCache() {
+            try {
+                const cached = localStorage.getItem('productsCache');
+                if (cached) {
+                    const { timestamp, data } = JSON.parse(cached);
+                    if (data && data.length > 0) {
+                        processData(data);
+                        setStatus(`Modo Sin Conexión: Mostrando datos del ${timestamp}`, false, 'bg-orange-100 text-orange-800');
+                        return true;
+                    }
+                }
+            } catch (e) {
+                console.error("Error al leer caché:", e);
+            }
+            return false;
+        }
+
+        // Función para procesar y preparar los datos una vez cargados
+        function processData(data) {
+            allProducts = data.map(item => {
+                const normalizedItem = {};
+                for (const key in item) {
+                    // Normalizar claves y valores
+                    const cleanedValue = item[key] ? item[key].trim() : '';
+                    normalizedItem[key.trim()] = cleanedValue;
+                }
+                return normalizedItem;
+            }).filter(item => Object.values(item).some(val => val !== '')); // Eliminar filas completamente vacías
+
+            hideInitialRow();
+
+            if (allProducts.length > 0) {
+                const productWithData = allProducts.find(p => Object.values(p).some(val => val !== ''));
+                if (productWithData) {
+                    let rawHeaders = Object.keys(productWithData);
+
+                    // 1. Encontrar la columna de categoría, código y PRECIO
+                    const categoryKey = rawHeaders.find(header => header.toUpperCase().includes('CATEGORIA'));
+                    const codeKey = rawHeaders.find(header => header.toUpperCase().includes('CODIGO'));
+                    // Búsqueda más robusta para el precio: PRECIO, VALOR, MONTO, P. VENTA
+                    const priceKey = rawHeaders.find(header => {
+                        const h = header.toUpperCase();
+                        return h.includes('PRECIO') || h.includes('VALOR') || h.includes('MONTO') || h.includes('P. VENTA');
+                    });
+
+                    if (categoryKey) {
+                        categoryColumnKey = categoryKey;
+                    } else {
+                        console.warn("No se encontró la columna de Categoría.");
+                    }
+
+                    if (codeKey) {
+                        codeColumnKey = codeKey;
+                    } else {
+                        console.warn("No se encontró la columna de Código.");
+                        setStatus("Advertencia: No se encontró columna de Código (CODIGO).", true);
+                    }
+
+                    if (priceKey) {
+                        priceColumnKey = priceKey; // ALMACENAR GLOBALMENTE (Necesitamos declarar esto arriba)
+                    } else {
+                        console.error("No se encontró la columna de Precio.");
+                        setStatus(`Error Crítico: No se encontró columna de Precio. Columnas detectadas: ${rawHeaders.join(', ')}`, true);
+                    }
+
+                    // 2. Llenar el Set de Códigos en Oferta
+                    OFFER_PRODUCT_CODES.clear();
+
+                    allProducts.forEach(product => {
+                        const category = product[categoryColumnKey];
+                        const code = product[codeColumnKey];
+
+                        if (category && category.trim()) {
+                            const normalizedCategory = category.toUpperCase().trim();
+
+                            // Si la categoría es OFERTA, agregamos el código al Set de restricciones
+                            if (normalizedCategory === 'OFERTA' && code && code.trim()) {
+                                OFFER_PRODUCT_CODES.add(code.toUpperCase().trim());
+                            }
+                        }
+
+                        // Pre-procesar el texto para la búsqueda flexible
+                        product.searchableText = rawHeaders.reduce((acc, key) => {
+                            // EXCLUIR PRECIO DE LA BÚSQUEDA: Evita encontrar números en el precio (ej: buscar "14" y encontrar algo que vale $14)
+                            if (key === priceColumnKey) return acc;
+
+                            const value = product[key];
+                            if (value) {
+                                return acc + ' ' + cleanSearchText(value);
+                            }
+                            return acc;
+                        }, '');
+                    });
+
+                    // 3. Filtrar y preparar encabezados para la tabla (excluir categoría)
+                    columnHeaders = rawHeaders.filter(header =>
+                        !header.toUpperCase().includes('CATEGORIA')
+                    );
+
+                    // 4. Agregar la columna de 'Descuentos' al final para la tabla
+                    columnHeaders.push('Descuentos');
+                } else {
+                    columnHeaders = ['codigo', 'descripcion', 'precio', 'Descuentos']; // Fallback
+                }
+
+                createHeader(columnHeaders);
+                filterAndRenderProducts();
+            } else {
+                setStatus("Datos cargados, pero el catálogo está vacío.", true);
+                resultsCount.textContent = "0 resultados.";
+            }
+        }
+
+
+        // =================================================================================
+        // 2. RENDERING Y FILTRADO
+        // =================================================================================
+
+        // Helper para formatear a moneda (Asegura 2 decimales exactos para los precios)
+        function formatCurrency(value) {
+            // Asegura que el valor sea tratado como número y usa toFixed(2) para 2 decimales exactos
+            const fixedValue = parseFloat(value).toFixed(2);
+            // Usa toLocaleString para agregar separadores de miles/decimales según la cultura
+            return `$${parseFloat(fixedValue).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+        }
+
+        // Abre la ventana modal de descuentos (sustituye al popover)
+        function openDiscountModal(button, productPrice, productCode, productDescription, productCategory) {
+            const content = getDiscountModalContentHTML(productPrice, productCode, productDescription, productCategory);
+            discountModalContent.innerHTML = content;
+            discountModal.classList.remove('hidden');
+            discountModal.classList.add('flex');
+        }
+
+        /**
+         * Crea el contenido HTML de la ventana modal con los descuentos.
+         * Aplica la política de restricción de descuento (OFERTA -> 0%, Categoría Restringida -> 3%, Normal -> 3-5%).
+         */
+        function getDiscountModalContentHTML(basePrice, productCode, productDescription, productCategory) {
+            // Eliminar cualquier formato de moneda para obtener el valor numérico base
+            const numericBasePrice = parseFloat(String(basePrice).replace(/[^0-9.-]+/g, "").replace(',', '.'));
+
+            if (isNaN(numericBasePrice)) {
+                return `<h2 class="text-xl font-bold text-gray-800 mb-4">Descuentos</h2>
+                        <p class="text-sm text-red-500">Error: El precio base "${basePrice}" no es válido para calcular descuentos.</p>`;
+            }
+
+            // --- LÓGICA DE RESTRICCIÓN DE DESCUENTO ---
+            const normalizedCategory = productCategory ? productCategory.toUpperCase().trim() : 'N/A';
+            const normalizedProductCode = productCode.toUpperCase().trim();
+
+            const isOffer = OFFER_PRODUCT_CODES.has(normalizedProductCode); // Check de Oferta
+            const isRestrictedCategory = RESTRICTED_CATEGORIES.has(normalizedCategory); // Check de Categoría Restringida
+
+            let availableDiscounts = [];
+            let policyMessage = '';
+
+            if (isOffer) {
+                // 1. POLÍTICA DE OFERTA (0% DESCUENTO)
+                availableDiscounts = [
+                    { percent: 0, label: '0% - Oferta', color: 'bg-red-100 border-red-500 text-red-800', priceColor: 'text-red-700' }
+                ];
+                policyMessage = `
+                    <p class="text-md font-bold text-red-700 mb-4 bg-red-100 p-3 rounded-lg border border-red-300">
+                        <span class="font-extrabold">¡Producto en OFERTA!</span> Este producto está en OFERTA y, por lo tanto, no aplica a ningún descuento adicional.
+                    </p>
+                `;
+            } else if (isRestrictedCategory) {
+                // 2. POLÍTICA DE CATEGORÍAS RESTRINGIDAS (SOLO 3% DESCUENTO)
+                availableDiscounts = [
+                    { percent: 3, label: '3%', color: 'bg-yellow-100 text-yellow-800', priceColor: 'text-yellow-700' }
+                ];
+                policyMessage = `
+                    <p class="text-sm font-bold text-red-600 mb-4 bg-red-50 p-3 rounded-lg border border-red-200">
+                        <span class="font-extrabold">¡ATENCIÓN!</span> Descuento restringido al 3% por política de precios.
+                    </p>
+                `;
+            } else {
+                // 3. POLÍTICA NORMAL (3%, 4%, 5%)
+                availableDiscounts = [
+                    { percent: 3, label: '3%', color: 'bg-yellow-100 text-yellow-800', priceColor: 'text-yellow-700' },
+                    { percent: 4, label: '4%', color: 'bg-green-100 text-green-800', priceColor: 'text-green-700' },
+                    { percent: 5, label: '5%', color: 'bg-indigo-100 text-indigo-800', priceColor: 'text-indigo-700' }
+                ];
+                policyMessage = ''; // No hay mensaje especial para la política normal
+            }
+            // ------------------------------------------
+
+            let html = `<h2 class="text-base font-extrabold  text-[#293241] mb-1">${productDescription}</h2>`;
+
+            // Inyectar el mensaje de la política (si existe)
+            html += policyMessage;
+
+            // Mostrar detalles del producto
+            html += `<p class="text-sm text-gray-500 mb-6"> 
+                        Código: <span class="font-mono text-gray-700 font-bold">${formatCurrency(numericBasePrice)}</span>
+                    </p>
+                    
+                    <div class="space-y-4">`;
+
+            // Generar los botones de descuento
+            availableDiscounts.forEach(({ percent, label, color, priceColor }) => {
+                const finalPrice = numericBasePrice * (1 - (percent / 100));
+                const formattedPrice = formatCurrency(finalPrice);
+
+                html += `
+                    <div class="${color} p-4 rounded-xl border-l-4 shadow-md flex justify-between items-center transition duration-150 transform hover:scale-[1.01]">
+                        <span class="font-semibold text-lg">${percent}%</span>
+                        <span class="text-2xl font-extrabold ${priceColor}">${formattedPrice}</span>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+            return html;
+        }
+
+        // Crea las cabeceras de la tabla a partir de las claves del objeto
+        function createHeader(columns) {
+            tableHeader.innerHTML = '';
+            columns.forEach(column => {
+                const th = document.createElement('th');
+                const isDiscountColumn = column === 'Descuentos';
+
+                th.className = 'px-2 py-3 text-left text-xs font-bold color-galvanissa uppercase transition duration-150 border-b border-gray-200';
+
+                if (!isDiscountColumn) {
+                    th.classList.add('cursor-pointer', 'bg-gray-50', 'hover:bg-gray-100');
+                    th.addEventListener('click', () => sortAndRender(column));
+                    th.setAttribute('data-column', column);
+                } else {
+                    th.classList.add('text-center');
+                }
+
+                th.textContent = column;
+                tableHeader.appendChild(th);
+            });
+        }
+
+        // Función auxiliar para formatear valores y aplicar estilos
+        function formatCellValue(key, value, cell) {
+            let displayValue = value;
+
+            // Utilizar un espacio no rompible (\u00A0) para asegurar que la celda mantenga su altura.
+            if (!displayValue || displayValue.trim() === '') {
+                displayValue = '\u00A0';
+                if (cell) cell.classList.add('text-gray-400', 'italic');
+            }
+
+            // Aplicar clases de estilo a la celda (Solo Desktop)
+            if (cell) {
+                cell.className = 'px-2 py-3 whitespace-nowrap'; // Clases base
+            }
+
+            // Formato especial para la columna 'PRECIO'
+            if (key === priceColumnKey && !isNaN(parseFloat(String(value).replace(/[^0-9.-]+/g, "")))) {
+                // Obtenemos el valor numérico base para usar nuestro formateador consistente
+                const numberValue = parseFloat(String(value).replace(/[^0-9.-]+/g, ""));
+                displayValue = formatCurrency(numberValue);
+                if (cell) cell.classList.add('font-extrabold', 'text-left', 'color-galvanissa');
+            } else if (key === codeColumnKey) {
+                if (cell) cell.classList.add('font-medium', 'text-gray-900', 'font-mono');
+            } else {
+                if (cell) cell.classList.add('text-left', 'text-gray-700');
+            }
+
+            return displayValue;
+        }
+
+
+        // Renderiza el cuerpo de la tabla (Desktop) y las tarjetas (Mobile)
+        function renderTable(products) {
+            productTableBody.innerHTML = '';
+            mobileList.innerHTML = '';
+
+            // Mostrar u ocultar el botón de limpiar búsqueda
+            if (searchInput.value.length > 0) {
+                clearSearchBtn.classList.remove('hidden');
+            } else {
+                clearSearchBtn.classList.add('hidden');
+            }
+
+            // Manejo de Cero Resultados
+            if (products.length === 0) {
+                const colspan = tableHeader.children.length > 0 ? tableHeader.children.length : 4;
+                productTableBody.innerHTML = `<tr><td colspan="${colspan}" class="p-4 text-center text-gray-500">No se encontraron productos que coincidan con la búsqueda.</td></tr>`;
+                mobileList.innerHTML = '<p class="p-4 text-center text-gray-500">No se encontraron productos que coincidan con la búsqueda.</p>';
+                resultsCount.textContent = "0 resultados.";
+                return;
+            }
+
+            // Detectar índices de columnas clave para el renderizado móvil
+            const keyIndices = {
+                codigo: codeColumnKey,
+                descripcion: columnHeaders.find(h => h.toUpperCase().includes('DESCRIPCION')),
+                precio: priceColumnKey,
+            };
+
+            // Usar una función auxiliar para obtener el valor formateado sin la celda (para mobile)
+            const getMobileValue = (key, value) => formatCellValue(key, value, null);
+
+            products.forEach((product, index) => {
+                // ------------------------------------
+                // 1. Renderizado de Fila de Tabla (Desktop)
+                // ------------------------------------
+                const row = productTableBody.insertRow();
+                row.className = index % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-100 hover:bg-gray-200';
+
+                // ------------------------------------
+                // 2. Variables para Renderizado Móvil
+                // ------------------------------------
+                const card = document.createElement('div');
+                card.className = 'bg-white p-1 rounded-lg shadow-md  space-y-0';
+
+                let topRowHTML = ''; // Código y Precio
+                let detailRowHTML = ''; // Descripción
+
+                // Iterar sobre las claves del producto para crear las celdas/campos
+                columnHeaders.forEach((key) => {
+
+                    // La columna Descuentos ya está en columnHeaders
+                    if (key === 'Descuentos') {
+                        // Extraer datos necesarios para el botón
+                        const rawPrice = product[keyIndices.precio];
+                        const productCode = product[codeColumnKey]; // USAR LA KEY GLOBAL REAL PARA EL CÓDIGO
+                        const productDescription = product[keyIndices.descripcion];
+                        const productCategory = product[categoryColumnKey] || 'N/A'; // OBTENER LA CATEGORÍA
+
+                        // === INYECCIÓN DE DATOS EN FILA DE DESKTOP (Descuentos) ===
+                        const cell = row.insertCell();
+                        cell.className = 'px-1 py-3 whitespace-nowrap text-center relative';
+
+                        // Pasar la categoría y código como argumentos
+                        cell.innerHTML = `
+                            <button class="discount-button px-3 py-1 text-sm font-semibold text-white bg-[#3d5a80] hover:bg-[#2f4866] rounded-full shadow-md transition duration-150"
+                                onclick="openDiscountModal(this, '${rawPrice}', '${productCode.replace(/'/g, "\\'")}', '${productDescription.replace(/'/g, "\\'")}', '${productCategory.replace(/'/g, "\\'")}')">
+                                Descuento
+                            </button>
+                        `;
+
+                    } else {
+                        const value = product[key];
+
+                        // === INYECCIÓN DE DATOS EN FILA DE DESKTOP (Normal) ===
+                        const cell = row.insertCell(); // Insertar la celda en la fila de desktop
+                        const displayValue = formatCellValue(key, value, cell);
+                        cell.textContent = displayValue;
+
+                        // === LÓGICA DE RENDERIZADO MÓVIL (Normal) ===
+                        const mobileValue = getMobileValue(key, value);
+
+                        if (key === keyIndices.codigo) {
+                            topRowHTML += `
+                                <div class="flex flex-col flex-shrink ml-2">
+                                    <span class="text-sm text-gray-900 font-bold">${mobileValue}</span>
+                                </div>
+                            `;
+                        } else if (key === keyIndices.precio) {
+                            topRowHTML += `
+                                <div class="flex-shrink-0 text-right mr-2">
+                                    <span class="text-sm font-extrabold color-galvanissa">${mobileValue}</span>
+                                </div>
+                            `;
+                        } else if (key === keyIndices.descripcion) {
+                            detailRowHTML += `<p class="text-xs text-gray-800 font-medium text-center py-1">${mobileValue}</p>`;
+                        }
+                    }
+                });
+
+                // --- Ensamblar la tarjeta móvil: Añadir botón de descuentos ---
+                const rawPrice = product[keyIndices.precio];
+                const productCode = product[codeColumnKey]; // USAR LA KEY GLOBAL REAL PARA EL CÓDIGO
+                const productDescription = product[keyIndices.descripcion];
+                const productCategory = product[categoryColumnKey] || 'N/A'; // OBTENER LA CATEGORÍA
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start border-b border-gray-200 pb-0">
+                        ${topRowHTML}
+                    </div>
+                    ${detailRowHTML}
+                    <div class="pt-0">
+                        <div class="relative flex justify-center">
+                            <button class="discount-button w-31 px-3 py-1 text-sm font-semibold text-white bg-[#3d5a80] hover:bg-[#2f4866] rounded-lg shadow-md transition duration-150"
+                                onclick="openDiscountModal(this, '${rawPrice}', '${productCode.replace(/'/g, "\\'")}', '${productDescription.replace(/'/g, "\\'")}', '${productCategory.replace(/'/g, "\\'")}')">
+                                Descuento
+                            </button>
+                        </div>
+                    </div>
+                `;
+                mobileList.appendChild(card);
+            });
+
+            resultsCount.textContent = `${products.length} resultados encontrados.`;
+            updateSortIcons();
+        }
+
+        // Filtra los productos basándose en el texto de búsqueda
+        const filterAndRenderProducts = debounce(() => {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+
+            let filteredProducts = allProducts;
+
+            if (searchTerm) {
+                // 1. Limpiar y tokenizar el término de búsqueda
+                const cleanedSearchTerm = cleanSearchText(searchTerm);
+
+                // 2. Obtener las palabras clave individuales (tokens)
+                const keywords = cleanedSearchTerm.split(/\s+/).filter(k => k.length > 0);
+
+                if (keywords.length > 0) {
+                    filteredProducts = allProducts.filter(product => {
+                        const productText = product.searchableText;
+
+                        // Lógica AND: el producto debe contener TODAS las palabras clave.
+                        return keywords.every(keyword => {
+                            // SI ES UN NÚMERO: Búsqueda exacta (palabra completa)
+                            // Evita que "4" coincida con "14" o "40".
+                            // Pero "4" SÍ coincidirá con "4 2" (que viene de "4x2").
+                            if (!isNaN(keyword)) {
+                                const regex = new RegExp(`\\b${keyword}\\b`);
+                                return regex.test(productText);
+                            }
+
+                            // SI ES TEXTO: Búsqueda parcial (substring)
+                            // "tub" coincide con "tubo"
+                            return productText.includes(keyword);
+                        });
+                    });
+                }
+            }
+
+            if (currentSort.column) {
+                sortProducts(filteredProducts, currentSort.column, currentSort.direction);
+            }
+
+            renderTable(filteredProducts);
+        }, 300);
+
+        // =================================================================================
+        // 3. ORDENACIÓN (SORTING)
+        // =================================================================================
+
+        function sortAndRender(column) {
+            // No permitir ordenar por la columna de descuentos
+            if (column === 'Descuentos') return;
+
+            let direction = 'asc';
+            if (currentSort.column === column) {
+                direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            }
+
+            currentSort = { column, direction };
+            filterAndRenderProducts(); // Vuelve a filtrar y renderizar con el nuevo orden
+        }
+
+        function sortProducts(products, column, direction) {
+            products.sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                // Limpiar el valor para obtener solo el número
+                const numA = parseFloat(String(valA).replace(/[^0-9.-]+/g, ""));
+                const numB = parseFloat(String(valB).replace(/[^0-9.-]+/g, ""));
+
+                let comparison = 0;
+                // Si ambos son números válidos, ordena numéricamente.
+                if (!isNaN(numA) && !isNaN(numB) && valA !== "" && valB !== "") {
+                    comparison = numA - numB;
+                } else {
+                    // Ordenación alfabética
+                    comparison = String(valA).localeCompare(String(valB));
+                }
+
+                return direction === 'asc' ? comparison : -comparison;
+            });
+        }
+
+        function updateSortIcons() {
+            const headers = tableHeader.querySelectorAll('th');
+            headers.forEach(th => {
+                let icon = th.querySelector('.sort-icon');
+                if (icon) icon.remove();
+
+                if (th.getAttribute('data-column') === currentSort.column) {
+                    const span = document.createElement('span');
+                    span.className = 'sort-icon';
+                    // Iconos Unicode: ▲ (ascendente), ▼ (descendente)
+                    span.innerHTML = currentSort.direction === 'asc' ? '&#x25B2;' : '&#x25BC;';
+                    th.appendChild(span);
+                }
+            });
+        }
+
+        // =================================================================================
+        // 4. EVENTOS Y CIERRE DE SESIÓN
+        // =================================================================================
+
+        async function handleLogout() {
+            // En un entorno de desarrollo local, no podemos cerrar sesión de Firebase,
+            // pero podemos mostrar un mensaje.
+            if (userId === 'local-dev') {
+                showMessage("Estás en modo de desarrollo local. No hay una sesión de Firebase activa para cerrar.");
+                return;
+            }
+
+            try {
+                if (auth) {
+                    await signOut(auth);
+                    showMessage("Sesión cerrada. Los datos sensibles están protegidos.");
+                    // Opcional: Recargar o redirigir
+                } else {
+                    showMessage("Error de autenticación: El servicio no está inicializado.");
+                }
+            } catch (error) {
+                showMessage(`Error al cerrar sesión: ${error.message}`);
+                console.error("Logout Error:", error);
+            }
+        }
+
+
+        // Inicialización de Event Listeners y la App
+        document.addEventListener('DOMContentLoaded', () => {
+            // Inicialización de Firebase (MANDATORIO)
+            initializeAppAndAuth();
+
+            // Evento para cerrar la caja de mensaje
+            closeMessageBtn.addEventListener('click', hideMessage);
+
+            // Evento para cerrar el modal de descuentos
+            closeDiscountModalBtn.addEventListener('click', closeDiscountModal);
+
+            // También cerrar el modal de descuentos si se hace clic fuera de él (en el fondo oscuro)
+            discountModal.addEventListener('click', (e) => {
+                if (e.target.id === 'discount-modal') {
+                    closeDiscountModal();
+                }
+            });
+
+            // ----------------------------------------------------
+            // Eventos del Catálogo
+            // ----------------------------------------------------
+            // Búsqueda (usa la función debounce para evitar la sobrecarga)
+            searchInput.addEventListener('input', filterAndRenderProducts);
+
+            // Limpiar búsqueda
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterAndRenderProducts();
+                searchInput.focus();
+            });
+
+            // ----------------------------------------------------
+            // Lógica de UI (Navbar/Menú)
+            // ----------------------------------------------------
+            const menuToggle = document.getElementById('menu-toggle');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const iconMenu = document.getElementById('icon-menu');
+            const iconClose = document.getElementById('icon-close');
+
+            menuToggle.addEventListener('click', () => {
+                const isExpanded = menuToggle.getAttribute('aria-expanded') === 'true' || false;
+                menuToggle.setAttribute('aria-expanded', !isExpanded);
+                mobileMenu.classList.toggle('hidden');
+                iconMenu.classList.toggle('hidden');
+                iconClose.classList.toggle('hidden');
+                document.body.classList.toggle('no-scroll', !isExpanded);
+            });
+
+            // Cierra el menú móvil al hacer clic en un enlace
+            document.querySelectorAll('#mobile-menu a').forEach(link => {
+                link.addEventListener('click', () => {
+                    if (!mobileMenu.classList.contains('hidden')) { menuToggle.click(); }
+                });
+            });
+
+            // Botones de Cerrar Sesión
+            document.getElementById('logout-button-desktop').addEventListener('click', handleLogout);
+            document.getElementById('logout-button-mobile').addEventListener('click', handleLogout);
+
+            // Registro del Service Worker para PWA
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js')
+                        .then(registration => {
+                            console.log('ServiceWorker registrado con éxito:', registration.scope);
+                            // Opcional: Mostrar un pequeño indicador visual temporal
+                            const status = document.getElementById('statusMessage');
+                            if (status && status.classList.contains('hidden')) {
+                                // Solo mostrar si no hay otro mensaje importante
+                                // setStatus('App lista para modo offline', false, 'bg-blue-100 text-blue-800');
+                                // setTimeout(() => status.classList.add('hidden'), 3000);
+                            }
+                        })
+                        .catch(error => {
+                            console.log('Fallo al registrar ServiceWorker:', error);
+                            setStatus('Error al instalar App (SW): ' + error.message, true);
+                        });
+                });
+            }
+        });
+    </script>
+
+</body>
+
+</html>
