@@ -1058,43 +1058,18 @@
             document.getElementById('logout-button-desktop').addEventListener('click', handleLogout);
             document.getElementById('logout-button-mobile').addEventListener('click', handleLogout);
 
-            // Registro del Service Worker para PWA con DEBUG VISIBLE
+            // Registro del Service Worker con Workbox
             if ('serviceWorker' in navigator) {
-                // Verificar HTTPS
-                if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                    setStatus('⚠️ PWA requiere HTTPS. Estás en: ' + window.location.protocol, true);
-                }
-
                 window.addEventListener('load', () => {
-                    setStatus('Intentando registrar SW...', false, 'bg-gray-100 text-gray-800');
-
-                    navigator.serviceWorker.register('./sw.js')
-                        .then(registration => {
-                            console.log('ServiceWorker registrado:', registration.scope);
-                            setStatus('SW Registrado. Estado: ' + (registration.active ? 'Activo' : 'Instalando...'), false, 'bg-blue-50 text-blue-600');
-
-                            if (registration.installing) {
-                                registration.installing.addEventListener('statechange', (e) => {
-                                    setStatus('SW Estado: ' + e.target.state, false, 'bg-blue-50 text-blue-600');
-                                    if (e.target.state === 'activated') {
-                                        setStatus('¡App lista para usar sin internet!', false, 'bg-blue-100 text-blue-800');
-                                    }
-                                });
-                            } else if (registration.active) {
-                                setStatus('Modo Offline: ACTIVO y LISTO.', false, 'bg-blue-100 text-blue-800');
-                            }
+                    navigator.serviceWorker.register('./sw.js', { scope: './' })
+                        .then(reg => {
+                            console.log('Service Worker registrado con éxito', reg);
+                            setStatus('App lista para funcionar offline', false, 'bg-blue-100 text-blue-800');
                         })
-                        .catch(error => {
-                            console.error('Fallo SW:', error);
-                            setStatus('Error PWA: ' + error.message, true);
+                        .catch(err => {
+                            console.error('Error al registrar SW', err);
                         });
                 });
-
-                // Detectar si ya estamos offline
-                window.addEventListener('online', () => setStatus('Conexión recuperada.', false, 'bg-green-100 text-green-800'));
-                window.addEventListener('offline', () => setStatus('Estás sin internet (Modo Offline)', true));
-            } else {
-                setStatus('Tu navegador no soporta Service Workers (PWA).', true);
             }
         });
     </script>
