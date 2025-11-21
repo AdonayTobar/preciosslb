@@ -2,6 +2,12 @@ importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.6.0/workbox
 
 workbox.setConfig({ debug: false });
 
+// PRECACHE: Forzar que index.html SIEMPRE esté en caché (crítico para iOS)
+workbox.precaching.precacheAndRoute([
+    { url: './index.html', revision: '1' },
+    { url: './', revision: '1' }
+]);
+
 // Cachea todo lo estático con Stale-while-revalidate (perfecto para GitHub Pages)
 // NOTA: Usamos NetworkFirst para navegación para asegurar que siempre se intente bajar la última versión
 workbox.routing.registerRoute(
@@ -33,10 +39,15 @@ workbox.routing.registerRoute(
     })
 );
 
-// Fallback offline: si todo falla, muestra tu index.html
-workbox.routing.setCatchHandler(({ event }) => {
+// Fallback offline: si todo falla, muestra la página principal
+workbox.routing.setCatchHandler(async ({ event }) => {
     if (event.request.mode === 'navigate') {
-        return caches.match('index.html');
+        // Intentar múltiples variantes para iOS
+        const possibleUrls = ['./index.html', './index.html', 'index.html', './'];
+        for (const url of possibleUrls) {
+            const cached = await caches.match(url);
+            if (cached) return cached;
+        }
     }
     return Response.error();
 });
@@ -44,6 +55,7 @@ workbox.routing.setCatchHandler(({ event }) => {
 // Forzar que el SW tome control inmediatamente el control
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', () => self.clients.claim());
+
 
 
 
