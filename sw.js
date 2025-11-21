@@ -8,6 +8,15 @@ workbox.precaching.precacheAndRoute([
     { url: './', revision: '1' }
 ]);
 
+// IMPORTANTE: NO cachear las peticiones a Google Sheets (siempre ir a la red)
+workbox.routing.registerRoute(
+    ({ url }) => url.origin === 'https://api.allorigins.win' ||
+        url.origin === 'https://docs.google.com' ||
+        url.hostname.includes('googleapis.com') ||
+        url.hostname.includes('gstatic.com'),
+    new workbox.strategies.NetworkOnly()
+);
+
 // Cachea todo lo estático con Stale-while-revalidate (perfecto para GitHub Pages)
 // NOTA: Usamos NetworkFirst para navegación para asegurar que siempre se intente bajar la última versión
 workbox.routing.registerRoute(
@@ -55,6 +64,8 @@ workbox.routing.setCatchHandler(async ({ event }) => {
 // Forzar que el SW tome control inmediatamente el control
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', () => self.clients.claim());
+
+
 
 
 
