@@ -393,6 +393,7 @@
         /**
          * Limpia el texto para facilitar la búsqueda, transformando símbolos de pulgadas y normalizando.
          * Por ejemplo: 'tubo ght 4"x2"' -> 'tubo ght 4 pulg 2 pulg'
+         * IMPORTANTE: Preserva los puntos decimales en números (ej: "1.2" se mantiene como "1.2")
          * @param {string} text El texto a limpiar.
          * @returns {string} El texto limpio en minúsculas.
          */
@@ -405,15 +406,25 @@
             cleaned = cleaned.replace(/"/g, ' pulg ');
 
             // 3. Reemplazar 'x' entre números por espacio (ej: 4x2 -> 4 2)
-            // Esto permite que al buscar "4", encuentre "4x2" porque ahora son dos números separados.
-            cleaned = cleaned.replace(/(\d)\s*x\s*(\d)/g, '$1 $2');
+            // Esto permite que al buscar "4x2", encuentre productos con "4" y "2"
+            // Soporta decimales: 3x1.25 -> 3 1.25
+            cleaned = cleaned.replace(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/g, '$1 $2');
 
-            // 4. Reemplazar símbolos comunes de unidad y puntuación con espacio
-            cleaned = cleaned.replace(/[\.,\/]/g, ' ');
+            // 4. NUEVO: Reemplazar comas por puntos para normalizar decimales (ej: "1,2" -> "1.2")
+            cleaned = cleaned.replace(/,/g, '.');
+
+            // 5. Reemplazar símbolos de puntuación EXCEPTO puntos que están entre dígitos (decimales)
+            // Primero protegemos los decimales temporalmente
+            cleaned = cleaned.replace(/(\d)\.(\d)/g, '$1DECIMAL$2');
+            // Ahora eliminamos puntos, barras y otros símbolos
+            cleaned = cleaned.replace(/[.\/]/g, ' ');
+            // Restauramos los decimales
+            cleaned = cleaned.replace(/DECIMAL/g, '.');
+
             // Eliminar guiones, asteriscos, comillas simples
             cleaned = cleaned.replace(/['*_-]/g, ' ');
 
-            // 5. Normalizar múltiples espacios a un solo espacio y quitar espacios de inicio/fin
+            // 6. Normalizar múltiples espacios a un solo espacio y quitar espacios de inicio/fin
             cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
             return cleaned;
@@ -894,11 +905,11 @@
 
                         // Lógica AND: el producto debe contener TODAS las palabras clave.
                         return keywords.every(keyword => {
-                            // SI ES UN NÚMERO: Búsqueda exacta (palabra completa)
-                            // Evita que "4" coincida con "14" o "40".
-                            // Pero "4" SÍ coincidirá con "4 2" (que viene de "4x2").
-                            if (!isNaN(keyword)) {
-                                const regex = new RegExp(`\\b${keyword}\\b`);
+                            // SI ES UN NÚMERO (incluyendo decimales como "1.2", "0.5", etc.)
+                            if (/^\d+(\.\d+)?$/.test(keyword)) {
+                                // Buscar el número como palabra completa
+                                // Esto evita que "1.2" coincida con "1.0" o "12"
+                                const regex = new RegExp(`\\b${keyword.replace('.', '\\.')}\\b`);
                                 return regex.test(productText);
                             }
 
